@@ -278,6 +278,63 @@ code {
   margin-top: 0.5rem;
 }
 
+.cue-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.btn.cue {
+  background: #ffb700;
+  color: #0a0c10;
+}
+
+/* Set Cue — solid green, matches reference image */
+.btn.set-cue {
+  background: #4caf50;
+  color: #0a0c10;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+}
+
+.loop-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+/* Loop ON — solid dark green fill, matches reference "Loop ON" style */
+.btn.loop-on {
+  background: #1a3a1a;
+  color: #4caf50;
+  border: 1px solid #4caf50;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.btn.loop-on:hover {
+  filter: brightness(1.2);
+}
+
+/* .btn.active kept for backward compat */
+.btn.active {
+  background: transparent;
+  color: #4caf50;
+  border: 1px solid #4caf50;
+  font-weight: 600;
+}
+
+.btn.active:hover {
+  filter: brightness(1.2);
+}
+
 /* Mixer (master + crossfader) — center column of the console */
 .mixer {
   flex: 0 0 150px;

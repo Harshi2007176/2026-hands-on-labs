@@ -25,7 +25,13 @@ type Action =
   | { type: 'END' }
   | { type: 'SET_VOLUME'; value: number }
   | { type: 'SET_EQ'; band: EqBand; value: number }
-  | { type: 'SET_FILTER'; value: number };
+  | { type: 'SET_FILTER'; value: number }
+  | { type: 'SET_TEMPO'; value: number }
+  | { type: 'SET_CUE'; norm: number }
+  | { type: 'GO_CUE' }
+  | { type: 'SET_LOOP_IN'; norm: number }
+  | { type: 'SET_LOOP_OUT'; norm: number }
+  | { type: 'TOGGLE_LOOP'; currentPosition: number };
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
@@ -33,7 +39,7 @@ function reducer(s: DeckState, a: Action): DeckState {
   switch (a.type) {
     case 'LOAD':
       // New track: stop, rewind, and bump seekGen so the transport accumulator resets.
-      return { ...s, track: a.track, playing: false, baseNorm: 0, seekGen: s.seekGen + 1, tempo: 1 };
+      return { ...s, track: a.track, playing: false, baseNorm: 0, seekGen: s.seekGen + 1, tempo: 1, cueNorm: null, loopIn: null, loopOut: null, looping: false };
     case 'PLAY':
       return s.track ? { ...s, playing: true } : s;
     case 'PAUSE':
@@ -49,6 +55,37 @@ function reducer(s: DeckState, a: Action): DeckState {
       return { ...s, [a.band]: a.value };
     case 'SET_FILTER':
       return { ...s, filterCutoff: Math.max(-1, Math.min(1, a.value)) };
+    case 'SET_TEMPO':
+      return { ...s, tempo: Math.max(0.5, Math.min(2.0, a.value)) };
+    case 'SET_CUE':
+      return { ...s, cueNorm: clamp01(a.norm) };
+    case 'GO_CUE':
+      if (s.cueNorm === null) return s;
+      return { ...s, playing: false, baseNorm: s.cueNorm, seekGen: s.seekGen + 1 };
+    case 'SET_LOOP_IN': {
+      // Invalidate loopOut if it would be at or before the new loopIn.
+      const newLoopOut = s.loopOut !== null && s.loopOut <= a.norm ? null : s.loopOut;
+      return { ...s, loopIn: clamp01(a.norm), loopOut: newLoopOut, looping: newLoopOut === null ? false : s.looping };
+    }
+    case 'SET_LOOP_OUT': {
+      // Only arm if loopIn is set and the out-point is after it.
+      if (s.loopIn !== null && clamp01(a.norm) > s.loopIn) {
+        return { ...s, loopOut: clamp01(a.norm), looping: true };
+      }
+      return { ...s, loopOut: clamp01(a.norm) };
+    }
+    case 'TOGGLE_LOOP': {
+      if (s.looping) {
+        // Loop exit: re-base the transport at the current wrapped position so playback
+        // continues from where the playhead actually is (loop-exit re-base per spec §6).
+        return { ...s, looping: false, baseNorm: clamp01(a.currentPosition), seekGen: s.seekGen + 1 };
+      }
+      // Only arm the loop if both points are valid.
+      if (s.loopIn !== null && s.loopOut !== null && s.loopOut > s.loopIn) {
+        return { ...s, looping: true };
+      }
+      return s;
+    }
     default:
       return s;
   }
@@ -64,6 +101,12 @@ export interface UseDeck {
   setVolume: (value: number) => void;
   setEq: (band: EqBand, value: number) => void;
   setFilter: (value: number) => void;
+  setTempo: (value: number) => void;
+  setCue: (norm: number) => void;
+  goCue: () => void;
+  setLoopIn: () => void;
+  setLoopOut: () => void;
+  toggleLoop: () => void;
 }
 
 export function useDeck(id: string, audioReady: boolean): UseDeck {
@@ -74,6 +117,10 @@ export function useDeck(id: string, audioReady: boolean): UseDeck {
   // Ref so the snapshot handler reads current `playing` without re-subscribing.
   const playingRef = useRef(state.playing);
   playingRef.current = state.playing;
+
+  // Ref so loop/cue callbacks can read the latest position without stale closures.
+  const positionRef = useRef(position);
+  positionRef.current = position;
 
   // Route this deck's analysis events (playhead + meter) into local state.
   useEffect(() => {
@@ -127,6 +174,19 @@ export function useDeck(id: string, audioReady: boolean): UseDeck {
   const setVolume = useCallback((value: number) => dispatch({ type: 'SET_VOLUME', value }), []);
   const setEq = useCallback((band: EqBand, value: number) => dispatch({ type: 'SET_EQ', band, value }), []);
   const setFilter = useCallback((value: number) => dispatch({ type: 'SET_FILTER', value }), []);
+  const setTempo = useCallback((value: number) => dispatch({ type: 'SET_TEMPO', value }), []);
+  const setCue = useCallback((norm: number) => dispatch({ type: 'SET_CUE', norm }), []);
+  const goCue = useCallback(() => dispatch({ type: 'GO_CUE' }), []);
 
-  return { state, position, level, load, togglePlay, seek, setVolume, setEq, setFilter };
+  const setLoopIn = useCallback(() => {
+    dispatch({ type: 'SET_LOOP_IN', norm: positionRef.current });
+  }, []);
+  const setLoopOut = useCallback(() => {
+    dispatch({ type: 'SET_LOOP_OUT', norm: positionRef.current });
+  }, []);
+  const toggleLoop = useCallback(() => {
+    dispatch({ type: 'TOGGLE_LOOP', currentPosition: positionRef.current });
+  }, []);
+
+  return { state, position, level, load, togglePlay, seek, setVolume, setEq, setFilter, setTempo, setCue, goCue, setLoopIn, setLoopOut, toggleLoop };
 }

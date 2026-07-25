@@ -36,6 +36,10 @@ export interface DeckState {
   eqMid: number; // dB, -12..12
   eqHigh: number; // dB, -12..12
   filterCutoff: number; // -1 (LPF down to 100Hz) .. 0 (bypass) .. 1 (HPF up to 10kHz)
+  cueNorm: number | null; // normalized cue point position, null if not set
+  loopIn: number | null; // normalized loop in-point, null if not set
+  loopOut: number | null; // normalized loop out-point, null if not set
+  looping: boolean; // true while the loop is active
 }
 
 export function initialDeckState(id: string): DeckState {
@@ -51,6 +55,10 @@ export function initialDeckState(id: string): DeckState {
     eqMid: 0,
     eqHigh: 0,
     filterCutoff: 0,
+    cueNorm: null,
+    loopIn: null,
+    loopOut: null,
+    looping: false,
   };
 }
 
@@ -127,8 +135,21 @@ export function buildDeckSignal(s: DeckState): DeckSignal | null {
 
   const position = el.add(base, el.accum(inc, seekTrig));
 
-  const leftRaw = el.table({ key: `${s.id}_tblL`, path: pathL }, position);
-  const rightRaw = el.table({ key: `${s.id}_tblR`, path: pathR }, position);
+  // Loop: wrap position into [loopIn, loopOut) using audio-rate floored modulo.
+  // This wraps seamlessly at audio rate with no JS polling glitch.
+  let readPosition: NodeRepr_t = position;
+  if (s.looping && s.loopIn !== null && s.loopOut !== null) {
+    const loopInNode = el.const({ key: `${s.id}_loopIn`, value: s.loopIn });
+    const loopOutNode = el.const({ key: `${s.id}_loopOut`, value: s.loopOut });
+    const len = el.sub(loopOutNode, loopInNode);
+    const offset = el.sub(position, loopInNode);
+    // floored modulo: offset - len * floor(offset / len)
+    const wrapped = el.add(loopInNode, el.sub(offset, el.mul(len, el.floor(el.div(offset, len)))));
+    readPosition = wrapped;
+  }
+
+  const leftRaw = el.table({ key: `${s.id}_tblL`, path: pathL }, readPosition);
+  const rightRaw = el.table({ key: `${s.id}_tblR`, path: pathR }, readPosition);
 
   let left = channelChain(leftRaw, s);
   const right = channelChain(rightRaw, s);

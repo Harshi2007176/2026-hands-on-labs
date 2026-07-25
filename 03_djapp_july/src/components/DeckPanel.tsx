@@ -60,7 +60,15 @@ export default function DeckPanel({ deck, label, ensureAudio }: Props) {
       <div className="track-name">{track ? track.name : 'No track loaded'}</div>
 
       <div className="waveform-wrap">
-        <Waveform peaks={track?.peaks ?? null} position={deck.position} onSeek={deck.seek} />
+        <Waveform
+          peaks={track?.peaks ?? null}
+          position={deck.position}
+          onSeek={deck.seek}
+          cueNorm={deck.state.cueNorm}
+          loopIn={deck.state.loopIn}
+          loopOut={deck.state.loopOut}
+          looping={deck.state.looping}
+        />
       </div>
 
       <div className="transport">
@@ -74,6 +82,55 @@ export default function DeckPanel({ deck, label, ensureAudio }: Props) {
         <span className="time">
           {track ? `${fmt(deck.position * track.duration)} / ${fmt(track.duration)}` : '0:00 / 0:00'}
         </span>
+      </div>
+
+      <div className="cue-controls">
+        <button
+          className="btn set-cue"
+          onClick={() => deck.setCue(deck.position)}
+          disabled={!track}
+        >
+          Set Cue
+        </button>
+        <button
+          className="btn ghost"
+          onClick={deck.goCue}
+          disabled={!track || deck.state.cueNorm === null}
+        >
+          ⏮ Cue
+        </button>
+        {deck.state.cueNorm !== null && track && (
+          <span className="time">Cue: {fmt(deck.state.cueNorm * track.duration)}</span>
+        )}
+      </div>
+
+      <div className="loop-controls">
+        <button
+          className="btn ghost"
+          onClick={deck.setLoopIn}
+          disabled={!track}
+        >
+          Loop In
+        </button>
+        <button
+          className="btn ghost"
+          onClick={deck.setLoopOut}
+          disabled={!track}
+        >
+          Loop Out
+        </button>
+        <button
+          className={`btn${deck.state.looping ? ' loop-on' : ' ghost'}`}
+          onClick={deck.toggleLoop}
+          disabled={!track || deck.state.loopIn === null || deck.state.loopOut === null}
+        >
+          {deck.state.looping ? '◇ Loop ON' : 'Loop'}
+        </button>
+        {deck.state.loopIn !== null && deck.state.loopOut !== null && track && (
+          <span className="time">
+            {fmt(deck.state.loopIn * track.duration)} – {fmt(deck.state.loopOut * track.duration)}
+          </span>
+        )}
       </div>
 
       {error && <p className="error">{error}</p>}
